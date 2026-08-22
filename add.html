@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add Scripture | Scripture Learning</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<header class="site-header">
+  <h1>Scripture Learning</h1>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="my-scriptures.html">My Scriptures</a>
+    <a href="add.html" aria-current="page">Add Scripture</a>
+  </nav>
+</header>
+<main id="main-content">
+  <h2>Add Scripture</h2>
+  <form id="add-form" class="card">
+    <label for="reference">Reference</label>
+    <input type="text" id="reference" placeholder="e.g. Proverbs 3:5-6" required>
+
+    <label for="book">Book</label>
+    <input type="text" id="book" list="book-list" placeholder="e.g. Proverbs" required>
+    <datalist id="book-list"></datalist>
+
+    <label for="scripture-text">Scripture Text</label>
+    <textarea id="scripture-text" placeholder="Paste or type the full passage here" required></textarea>
+
+    <p id="form-status" class="placeholder-note" style="display:none;"></p>
+    <p><button type="submit" class="btn">Add Scripture</button></p>
+  </form>
+</main>
+<footer class="site-footer">Scripture Learning</footer>
+<script src="js/api.js"></script>
+<script>
+  const BOOKS = [
+    'Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth',
+    '1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah',
+    'Esther','Job','Psalms','Proverbs','Ecclesiastes','Song of Solomon','Isaiah','Jeremiah',
+    'Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum',
+    'Habakkuk','Zephaniah','Haggai','Zechariah','Malachi',
+    'Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians','Galatians',
+    'Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy',
+    '2 Timothy','Titus','Philemon','Hebrews','James','1 Peter','2 Peter','1 John','2 John',
+    '3 John','Jude','Revelation',
+  ];
+  document.getElementById('book-list').innerHTML = BOOKS.map(b => `<option value="${b}">`).join('');
+
+  const statusEl = document.getElementById('form-status');
+  function showStatus(message) {
+    statusEl.textContent = message;
+    statusEl.style.display = '';
+  }
+
+  (async () => { await AUTH_READY; })();
+
+  document.getElementById('add-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    await AUTH_READY;
+    const reference = document.getElementById('reference').value.trim();
+    const book = document.getElementById('book').value.trim();
+    const scriptureText = document.getElementById('scripture-text').value.trim();
+    if (!reference || !book || !scriptureText) return;
+
+    const submitBtn = ev.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    statusEl.style.display = 'none';
+    try {
+      const result = await callApi('addScripture', { reference, book, scriptureText });
+      if (result.ok) {
+        window.location.href = `scripture.html?id=${result.id}`;
+      } else {
+        showStatus(result.error || 'Could not add that scripture. Please try again.');
+        submitBtn.disabled = false;
+      }
+    } catch (e) {
+      showStatus('Something went wrong. Please try again.');
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

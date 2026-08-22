@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Scriptures | Scripture Learning</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<header class="site-header">
+  <h1>Scripture Learning</h1>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="my-scriptures.html" aria-current="page">My Scriptures</a>
+    <a href="add.html">Add Scripture</a>
+  </nav>
+</header>
+<main id="main-content">
+  <h2>My Scriptures</h2>
+  <div class="filter-bar" id="filter-bar"></div>
+  <div id="content">Loading&hellip;</div>
+</main>
+<footer class="site-footer">Scripture Learning</footer>
+<script src="js/api.js"></script>
+<script>
+  const FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'learning', label: 'Learning' },
+    { key: 'memorized', label: 'Memorized' },
+    { key: 'available', label: 'Available' },
+  ];
+
+  function renderFilterBar(current) {
+    const bar = document.getElementById('filter-bar');
+    bar.innerHTML = FILTERS.map(f =>
+      `<a href="my-scriptures.html?filter=${f.key}"${f.key === current ? ' aria-current="page"' : ''}>${f.label}</a>`
+    ).join('');
+  }
+
+  (async () => {
+    await AUTH_READY;
+    const filter = new URLSearchParams(window.location.search).get('filter') || 'all';
+    renderFilterBar(filter);
+
+    const el = document.getElementById('content');
+    try {
+      const result = await callApiGet('listScriptures', { filter });
+      if (!result.ok) {
+        showPlaceholder(el, "Couldn't load your scriptures right now.");
+        return;
+      }
+      const scriptures = result.scriptures;
+      if (!scriptures.length) {
+        el.innerHTML = `<p class="placeholder-note">Nothing here yet. <a href="add.html">Add a scripture</a> to get started.</p>`;
+        return;
+      }
+      el.innerHTML = scriptures.map(s => `
+        <div class="card scripture-card">
+          <h3>${escapeHtml(s.reference)}</h3>
+          <div class="meta">
+            ${escapeHtml(s.book)}
+            ${s.isMemorized ? '<span class="badge">Memorized</span>' : (s.isActive ? '<span class="badge">Learning</span>' : '<span class="badge">Available</span>')}
+          </div>
+          <p>${escapeHtml(s.scriptureText.length > 120 ? s.scriptureText.slice(0, 120) + '…' : s.scriptureText)}</p>
+          <a class="btn" href="scripture.html?id=${s.id}">Open</a>
+        </div>
+      `).join('');
+    } catch (e) {
+      showPlaceholder(el, "Couldn't load right now — check your connection and try refreshing.");
+    }
+  })();
+</script>
+</body>
+</html>

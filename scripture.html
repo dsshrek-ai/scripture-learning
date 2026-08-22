@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scripture | Scripture Learning</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<header class="site-header">
+  <h1>Scripture Learning</h1>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="my-scriptures.html">My Scriptures</a>
+    <a href="add.html">Add Scripture</a>
+  </nav>
+</header>
+<main id="main-content">
+  <div id="content">Loading&hellip;</div>
+</main>
+<footer class="site-footer">Scripture Learning</footer>
+<script src="js/api.js"></script>
+<script>
+  const scriptureId = Number(new URLSearchParams(window.location.search).get('id'));
+  let current = null;
+
+  function statusBadge(s) {
+    if (s.isMemorized) return '<span class="badge">Memorized</span>';
+    if (s.isActive) return '<span class="badge">Learning</span>';
+    return '<span class="badge">Available</span>';
+  }
+
+  function render() {
+    const s = current;
+    const el = document.getElementById('content');
+    el.innerHTML = `
+      <div class="card">
+        <h2>${escapeHtml(s.reference)}</h2>
+        <div class="meta">${escapeHtml(s.book)} ${statusBadge(s)}</div>
+        <p class="scripture-text">${escapeHtml(s.scriptureText)}</p>
+      </div>
+      <div class="card">
+        <p>
+          <button class="btn" id="toggle-memorized">${s.isMemorized ? 'Mark Not Memorized' : 'Mark Memorized'}</button>
+          ${!s.isMemorized ? `<button class="btn btn-secondary" id="toggle-active">${s.isActive ? 'Move to Available' : 'Start Learning'}</button>` : ''}
+        </p>
+        <p>
+          <button class="btn btn-secondary" id="edit-btn">Edit</button>
+          <button class="btn btn-danger" id="delete-btn">Delete</button>
+        </p>
+        <div id="edit-form" style="display:none;">
+          <label for="edit-reference">Reference</label>
+          <input type="text" id="edit-reference" value="${escapeHtml(s.reference)}">
+          <label for="edit-book">Book</label>
+          <input type="text" id="edit-book" value="${escapeHtml(s.book)}">
+          <label for="edit-text">Scripture Text</label>
+          <textarea id="edit-text">${escapeHtml(s.scriptureText)}</textarea>
+          <p><button class="btn" id="save-edit">Save</button> <button class="btn btn-secondary" id="cancel-edit">Cancel</button></p>
+        </div>
+        <p id="detail-status" class="placeholder-note" style="display:none;"></p>
+      </div>
+    `;
+    wireButtons();
+  }
+
+  function showStatus(message) {
+    const statusEl = document.getElementById('detail-status');
+    statusEl.textContent = message;
+    statusEl.style.display = '';
+  }
+
+  async function reload() {
+    const result = await callApiGet('listScriptures', { filter: 'all' });
+    if (!result.ok) { showPlaceholder(document.getElementById('content'), "Couldn't load this scripture."); return; }
+    current = result.scriptures.find(s => s.id === scriptureId);
+    if (!current) { showPlaceholder(document.getElementById('content'), "That scripture wasn't found."); return; }
+    render();
+  }
+
+  function wireButtons() {
+    document.getElementById('toggle-memorized').addEventListener('click', async () => {
+      await callApi('updateScripture', { id: scriptureId, isMemorized: !current.isMemorized });
+      await reload();
+    });
+    const toggleActiveBtn = document.getElementById('toggle-active');
+    if (toggleActiveBtn) {
+      toggleActiveBtn.addEventListener('click', async () => {
+        await callApi('updateScripture', { id: scriptureId, isActive: !current.isActive });
+        await reload();
+      });
+    }
+    document.getElementById('edit-btn').addEventListener('click', () => {
+      document.getElementById('edit-form').style.display = '';
+    });
+    document.getElementById('cancel-edit').addEventListener('click', () => {
+      document.getElementById('edit-form').style.display = 'none';
+    });
+    document.getElementById('save-edit').addEventListener('click', async () => {
+      const reference = document.getElementById('edit-reference').value.trim();
+      const book = document.getElementById('edit-book').value.trim();
+      const scriptureText = document.getElementById('edit-text').value.trim();
+      if (!reference || !book || !scriptureText) return;
+      const result = await callApi('updateScripture', { id: scriptureId, reference, book, scriptureText });
+      if (result.ok) {
+        await reload();
+      } else {
+        showStatus(result.error || 'Could not save changes.');
+      }
+    });
+    document.getElementById('delete-btn').addEventListener('click', async () => {
+      if (!confirm('Delete this scripture? This cannot be undone.')) return;
+      await callApi('deleteScripture', { id: scriptureId });
+      window.location.href = 'my-scriptures.html';
+    });
+  }
+
+  (async () => {
+    await AUTH_READY;
+    if (!scriptureId) {
+      showPlaceholder(document.getElementById('content'), 'No scripture specified.');
+      return;
+    }
+    try {
+      await reload();
+    } catch (e) {
+      showPlaceholder(document.getElementById('content'), "Couldn't load right now — check your connection and try refreshing.");
+    }
+  })();
+</script>
+</body>
+</html>

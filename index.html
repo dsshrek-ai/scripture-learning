@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home | Scripture Learning</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<header class="site-header">
+  <h1>Scripture Learning</h1>
+  <nav class="site-nav">
+    <a href="index.html" aria-current="page">Home</a>
+    <a href="my-scriptures.html">My Scriptures</a>
+    <a href="add.html">Add Scripture</a>
+  </nav>
+</header>
+<main id="main-content">
+  <div id="content">Loading&hellip;</div>
+</main>
+<footer class="site-footer">Scripture Learning</footer>
+<script src="js/api.js"></script>
+<script>
+  (async () => {
+    await AUTH_READY;
+    const el = document.getElementById('content');
+    try {
+      const result = await callApiGet('listScriptures', { filter: 'all' });
+      if (!result.ok) {
+        showPlaceholder(el, "Couldn't load your scriptures right now.");
+        return;
+      }
+      const scriptures = result.scriptures;
+      const learning = scriptures.filter(s => s.isActive && !s.isMemorized).length;
+      const memorized = scriptures.filter(s => s.isMemorized).length;
+
+      el.innerHTML = `
+        <div class="card home-tile">
+          <div class="big-number">${learning}</div>
+          <div>Currently Learning</div>
+        </div>
+        <div class="card home-tile">
+          <div class="big-number">${memorized}</div>
+          <div>Memorized</div>
+        </div>
+        <div class="card home-tile">
+          <div class="big-number">${scriptures.length}</div>
+          <div>Total Scriptures</div>
+        </div>
+        <div class="home-actions">
+          <a class="btn" href="my-scriptures.html">My Scriptures</a>
+          <a class="btn btn-secondary" href="add.html">Add Scripture</a>
+        </div>
+      `;
+    } catch (e) {
+      showPlaceholder(el, "Couldn't load right now — check your connection and try refreshing.");
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,274 @@
+:root {
+  --color-bg: #f5f3fa;
+  --color-surface: #ffffff;
+  --color-text: #221c2e;
+  --color-primary: #5b3f8a;
+  --color-primary-dark: #3d2a5c;
+  --color-accent: #a3822a;
+  --color-border: #ded6ea;
+  --color-pinned-bg: #f0e9fb;
+  --max-width: 900px;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  background: var(--color-primary-dark);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  z-index: 100;
+  border-radius: 0 0 var(--radius) 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+html {
+  font-size: 20px;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Verdana, Arial, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+header.site-header {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 1rem;
+}
+
+header.site-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.6rem;
+  text-align: center;
+}
+
+nav.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+nav.site-nav a {
+  color: #fff;
+  text-decoration: none;
+  background: var(--color-primary-dark);
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+nav.site-nav a:hover,
+nav.site-nav a[aria-current="page"] {
+  background: var(--color-accent);
+}
+
+main {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+h2 {
+  color: var(--color-primary-dark);
+  font-size: 1.5rem;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  display: inline-block;
+  background: var(--color-accent);
+  color: #221c2e;
+  font-weight: bold;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  margin-bottom: 0.5rem;
+}
+
+.btn {
+  display: inline-block;
+  background: var(--color-primary);
+  color: #fff;
+  text-decoration: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 1.1rem;
+  border: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-primary-dark);
+}
+
+.btn:disabled {
+  background: #948da3;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--color-pinned-bg);
+}
+
+.btn-danger {
+  background: #a3392a;
+}
+
+.btn-danger:hover {
+  background: #7c2a1f;
+}
+
+.placeholder-note {
+  background: var(--color-pinned-bg);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius);
+  padding: 1rem;
+  font-size: 1rem;
+}
+
+select, input[type="text"], input[type="email"], input[type="password"], textarea {
+  font-size: 1.05rem;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  width: 100%;
+  max-width: 480px;
+  font-family: inherit;
+}
+
+textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+form label {
+  display: block;
+  font-weight: bold;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.scripture-text {
+  font-size: 1.3rem;
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter-bar a {
+  display: inline-block;
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+}
+
+.filter-bar a[aria-current="page"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.scripture-card h3 {
+  margin: 0 0 0.4rem 0;
+}
+
+.scripture-card .meta {
+  font-size: 0.9rem;
+  color: var(--color-primary-dark);
+  margin-bottom: 0.6rem;
+}
+
+.home-tile {
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.home-tile .big-number {
+  font-size: 2.2rem;
+  font-weight: bold;
+  color: var(--color-primary-dark);
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+footer.site-footer {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  color: var(--color-primary-dark);
+  font-size: 0.9rem;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+#auth-gate-overlay input {
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 16px;
+  }
+  nav.site-nav {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+  }
+  nav.site-nav a {
+    font-size: 0.95rem;
+    padding: 0.45rem 0.7rem;
+  }
+  .home-actions {
+    flex-direction: column;
+  }
+  .home-actions .btn {
+    text-align: center;
+  }
+}
