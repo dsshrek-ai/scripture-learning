@@ -114,8 +114,16 @@ function shapeScripture(array $row): array {
     'isMemorized' => (bool)$row['is_memorized'],
     'dateMemorized' => $row['date_memorized'],
     'createdAt' => $row['created_at'],
+    'learningLevel' => (int)$row['learning_level'],
+    'textPercent' => $row['text_percent'] === null ? null : (int)$row['text_percent'],
+    'referencePercent' => $row['reference_percent'] === null ? null : (int)$row['reference_percent'],
+    'dateReviewed' => $row['date_reviewed'],
   ];
 }
+
+const MAX_LEARNING_LEVEL = 4;
+const LEVEL_UP_THRESHOLD = 85;
+const LEVEL_DOWN_THRESHOLD = 50;
 
 // ---- Router ----
 
@@ -251,6 +259,76 @@ switch ($action) {
     $stmt->execute();
     $stmt->close();
     respond(['ok' => true]);
+  }
+
+  // Records the result of one practice attempt. `mode` is 'text' (the
+  // difficulty-ladder practice, drives learning_level) or 'reference' (the
+  // fixed-difficulty reverse quiz, never changes learning_level). `percent`
+  // is computed client-side from the tap-to-reveal interaction — this
+  // action just persists it and applies the auto-advance rule for text mode.
+  case 'recordPracticeAttempt': {
+    $user = currentUser();
+    $id = (int)($body['id'] ?? 0);
+    $mode = (string)($body['mode'] ?? '');
+    $percent = (int)($body['percent'] ?? -1);
+    if ($id <= 0 || !in_array($mode, ['text', 'reference'], true) || $percent < 0 || $percent > 100) {
+      fail('id, a valid mode, and a percent between 0 and 100 are required');
+    }
+
+    $stmt = db()->prepare('SELECT learning_level, is_memorized FROM scripture_items WHERE id = ? AND user_id = ?');
+    $stmt->bind_param('ii', $id, $user['id']);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$row) {
+      fail('Scripture not found', 404);
+    }
+
+    $today = date('Y-m-d');
+
+    if ($mode === 'reference') {
+      $stmt = db()->prepare(
+        'UPDATE scripture_items SET reference_percent = ?, date_reviewed = ? WHERE id = ? AND user_id = ?'
+      );
+      $stmt->bind_param('isii', $percent, $today, $id, $user['id']);
+      $stmt->execute();
+      $stmt->close();
+      respond(['ok' => true]);
+    }
+
+    // mode === 'text': apply the level auto-advance rule based on THIS
+    // attempt's percent, evaluated against the level just practiced at.
+    $level = (int)$row['learning_level'];
+    if ($percent >= LEVEL_UP_THRESHOLD) {
+      $level = min($level + 1, MAX_LEARNING_LEVEL);
+    } elseif ($percent < LEVEL_DOWN_THRESHOLD) {
+      $level = max($level - 1, 1);
+    }
+
+    // Reaching (or already sitting at) the top level with a strong attempt
+    // is independent recall -- the milestone the whole ladder is aimed at.
+    // Doesn't require this to be a *fresh* level-up; scoring well again at
+    // level 4 counts too. Never un-sets an existing memorized flag here —
+    // that's still a manual, deliberate action on the scripture detail page.
+    $justMemorized = $level === MAX_LEARNING_LEVEL && $percent >= LEVEL_UP_THRESHOLD && !$row['is_memorized'];
+
+    if ($justMemorized) {
+      $stmt = db()->prepare(
+        'UPDATE scripture_items
+         SET learning_level = ?, text_percent = ?, date_reviewed = ?, is_memorized = 1, date_memorized = ?
+         WHERE id = ? AND user_id = ?'
+      );
+      $stmt->bind_param('iissii', $level, $percent, $today, $today, $id, $user['id']);
+    } else {
+      $stmt = db()->prepare(
+        'UPDATE scripture_items SET learning_level = ?, text_percent = ?, date_reviewed = ? WHERE id = ? AND user_id = ?'
+      );
+      $stmt->bind_param('iisii', $level, $percent, $today, $id, $user['id']);
+    }
+    $stmt->execute();
+    $stmt->close();
+
+    respond(['ok' => true, 'learningLevel' => $level, 'justMemorized' => $justMemorized]);
   }
 
   case 'deleteScripture': {

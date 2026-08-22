@@ -62,6 +62,11 @@
             ${escapeHtml(s.book)}
             ${s.isMemorized ? '<span class="badge">Memorized</span>' : (s.isActive ? '<span class="badge">Learning</span>' : '<span class="badge">Available</span>')}
           </div>
+          <div class="meta">
+            Level ${s.learningLevel} of 4
+            ${s.textPercent !== null ? ` &middot; Text: ${s.textPercent}%` : ''}
+            ${s.referencePercent !== null ? ` &middot; Reference: ${s.referencePercent}%` : ''}
+          </div>
           <p>${escapeHtml(s.scriptureText.length > 120 ? s.scriptureText.slice(0, 120) + '…' : s.scriptureText)}</p>
           <a class="btn" href="scripture.html?id=${s.id}">Open</a>
         </div>

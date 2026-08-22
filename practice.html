@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practice | Scripture Learning</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .tile-passage {
+    font-size: 1.3rem;
+    line-height: 2.4;
+  }
+  .tile {
+    display: inline;
+    cursor: pointer;
+    background: var(--color-pinned-bg);
+    border-radius: 4px;
+    padding: 0.05rem 0.2rem;
+  }
+  .tile.revealed {
+    background: transparent;
+    cursor: default;
+    padding: 0;
+  }
+  .mode-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .mode-tabs button {
+    flex: 1;
+  }
+  .mode-tabs button.active {
+    background: var(--color-primary-dark);
+  }
+  .level-indicator {
+    font-size: 0.95rem;
+    color: var(--color-primary-dark);
+    margin-bottom: 0.75rem;
+  }
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<header class="site-header">
+  <h1>Scripture Learning</h1>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="my-scriptures.html">My Scriptures</a>
+    <a href="add.html">Add Scripture</a>
+  </nav>
+</header>
+<main id="main-content">
+  <div id="content">Loading&hellip;</div>
+</main>
+<footer class="site-footer">Scripture Learning</footer>
+<script src="js/api.js"></script>
+<script>
+  const scriptureId = Number(new URLSearchParams(window.location.search).get('id'));
+  let scripture = null;
+  let mode = 'text'; // 'text' | 'reference'
+  let tiles = [];
+
+  const LEVEL_NAMES = {
+    1: 'Progressive Word Hiding',
+    2: 'Word-Length Blanks',
+    3: 'First-Letter Mode',
+    4: 'Recite from Reference',
+  };
+
+  // Splits into alternating word / whitespace chunks so original spacing
+  // and line breaks are preserved exactly.
+  function tokenize(text) {
+    return (text.match(/\S+|\s+/g) || []).map(chunk => ({
+      text: chunk,
+      isWord: !/^\s+$/.test(chunk),
+    }));
+  }
+
+  // 'blank' = no shape hint at all. 'length' = underscores matching each
+  // letter/digit, punctuation stays visible. 'firstLetter' = first
+  // letter/digit visible, rest blanked, punctuation stays visible.
+  function maskWord(word, style) {
+    if (style === 'blank') return '▢▢▢';
+    if (style === 'length') return word.replace(/[A-Za-z0-9]/g, '_');
+    if (style === 'firstLetter') {
+      let used = false;
+      return word.replace(/[A-Za-z0-9]/g, (ch) => {
+        if (!used) { used = true; return ch; }
+        return '_';
+      });
+    }
+    return word;
+  }
+
+  // Builds the tile list for the current mode + (for text mode) the
+  // scripture's current learning level.
+  function buildTiles() {
+    if (mode === 'reference') {
+      return tokenize(scripture.reference).map(t => ({
+        ...t,
+        initiallyHidden: t.isWord,
+        style: 'length',
+        revealed: !t.isWord,
+      }));
+    }
+
+    const level = scripture.learningLevel;
+    const style = level === 2 ? 'length' : level === 3 ? 'firstLetter' : 'blank';
+    return tokenize(scripture.scriptureText).map(t => {
+      if (!t.isWord) return { ...t, initiallyHidden: false, style: null, revealed: true };
+      // Level 1 only hides a random ~35% of words; levels 2-4 hide all of them.
+      const hidden = level === 1 ? Math.random() < 0.35 : true;
+      return { ...t, initiallyHidden: hidden, style, revealed: !hidden };
+    });
+  }
+
+  function renderTiles() {
+    const passageEl = document.getElementById('passage');
+    passageEl.innerHTML = tiles.map((t, i) => {
+      if (!t.isWord) return escapeHtml(t.text);
+      if (t.revealed) return `<span class="tile revealed">${escapeHtml(t.text)}</span>`;
+      return `<span class="tile" data-i="${i}">${escapeHtml(maskWord(t.text, t.style))}</span>`;
+    }).join('');
+    passageEl.querySelectorAll('.tile:not(.revealed)').forEach(el => {
+      el.addEventListener('click', () => {
+        const i = Number(el.dataset.i);
+        tiles[i].revealed = true;
+        renderTiles();
+      });
+    });
+  }
+
+  function computePercent() {
+    const wordTiles = tiles.filter(t => t.isWord);
+    // A word counts as "recalled" if it was never hidden, or was hidden but
+    // never tapped open. Anything the user tapped counts against the score.
+    const tappedCount = wordTiles.filter(t => t.initiallyHidden && t.revealed).length;
+    return Math.round(((wordTiles.length - tappedCount) / wordTiles.length) * 100);
+  }
+
+  function startAttempt() {
+    tiles = buildTiles();
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('finish-btn').style.display = '';
+    renderTiles();
+  }
+
+  async function finishAttempt() {
+    const percent = computePercent();
+    document.getElementById('finish-btn').style.display = 'none';
+    const resultEl = document.getElementById('result');
+    resultEl.style.display = '';
+    resultEl.innerHTML = `<p class="placeholder-note">Saving…</p>`;
+
+    try {
+      const res = await callApi('recordPracticeAttempt', { id: scriptureId, mode, percent });
+      if (!res.ok) {
+        resultEl.innerHTML = `<p class="placeholder-note">Couldn't save that attempt. Please try again.</p>`;
+        return;
+      }
+      let message = `<strong>${percent}%</strong> recalled without help.`;
+      if (mode === 'text') {
+        scripture.learningLevel = res.learningLevel;
+        if (res.justMemorized) {
+          scripture.isMemorized = true;
+          message += ` 🎉 Recalled independently at the top level — marked as Memorized!`;
+        } else {
+          message += ` Next attempt will be at level ${res.learningLevel} (${escapeHtml(LEVEL_NAMES[res.learningLevel])}).`;
+        }
+      }
+      resultEl.innerHTML = `
+        <div class="card">
+          <p>${message}</p>
+          <p>
+            <button class="btn" id="again-btn">Practice Again</button>
+            <a class="btn btn-secondary" href="scripture.html?id=${scriptureId}">Back to Scripture</a>
+          </p>
+        </div>
+      `;
+      document.getElementById('again-btn').addEventListener('click', () => {
+        renderLevelIndicator();
+        startAttempt();
+      });
+    } catch (e) {
+      resultEl.innerHTML = `<p class="placeholder-note">Something went wrong saving that attempt.</p>`;
+    }
+  }
+
+  function renderLevelIndicator() {
+    const el = document.getElementById('level-indicator');
+    if (mode === 'reference') {
+      el.textContent = 'Given the text, recall the reference.';
+    } else {
+      el.textContent = `Level ${scripture.learningLevel} of ${Object.keys(LEVEL_NAMES).length}: ${LEVEL_NAMES[scripture.learningLevel]}`;
+    }
+  }
+
+  function switchMode(newMode) {
+    mode = newMode;
+    document.getElementById('tab-text').classList.toggle('active', mode === 'text');
+    document.getElementById('tab-reference').classList.toggle('active', mode === 'reference');
+    renderLevelIndicator();
+    startAttempt();
+  }
+
+  function renderPage() {
+    const el = document.getElementById('content');
+    el.innerHTML = `
+      <h2>${escapeHtml(scripture.reference)}</h2>
+      <div class="mode-tabs">
+        <button class="btn" id="tab-text">Practice Text</button>
+        <button class="btn" id="tab-reference">Practice Reference</button>
+      </div>
+      <div class="level-indicator" id="level-indicator"></div>
+      <div class="card">
+        <p class="tile-passage" id="passage"></p>
+        <p><button class="btn" id="finish-btn">I've Recited It — Check My Score</button></p>
+        <div id="result" style="display:none;"></div>
+      </div>
+    `;
+    document.getElementById('tab-text').addEventListener('click', () => switchMode('text'));
+    document.getElementById('tab-reference').addEventListener('click', () => switchMode('reference'));
+    document.getElementById('finish-btn').addEventListener('click', finishAttempt);
+    switchMode('text');
+  }
+
+  (async () => {
+    await AUTH_READY;
+    if (!scriptureId) {
+      showPlaceholder(document.getElementById('content'), 'No scripture specified.');
+      return;
+    }
+    try {
+      const result = await callApiGet('listScriptures', { filter: 'all' });
+      if (!result.ok) { showPlaceholder(document.getElementById('content'), "Couldn't load this scripture."); return; }
+      scripture = result.scriptures.find(s => s.id === scriptureId);
+      if (!scripture) { showPlaceholder(document.getElementById('content'), "That scripture wasn't found."); return; }
+      renderPage();
+    } catch (e) {
+      showPlaceholder(document.getElementById('content'), "Couldn't load right now — check your connection and try refreshing.");
+    }
+  })();
+</script>
+</body>
+</html>

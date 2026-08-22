@@ -16,26 +16,37 @@ The core CRUD loop: log in, add a scripture, read it, mark it memorized, filter 
 - Home screen with basic counts (Learning / Memorized / Total) and primary actions.
 
 **Deliberately not in Phase 1's schema**: `date_reviewed`, `text_percent`, `reference_percent`,
-`require_exact_wording` (Phase 2), `next_review_date`, `learning_level` (Phase 3). None of these have code that
-reads them yet — adding unused columns ahead of the feature that needs them is exactly the kind of drift that's
-bitten other apps in this family before.
+`learning_level` (Phase 2), `next_review_date` (Phase 3). None of these had code that read them yet — adding unused
+columns ahead of the feature that needs them is exactly the kind of drift that's bitten other apps in this family
+before.
 
-## Phase 2 — Practice Modes (not started)
+## Phase 2 — Practice Modes (done)
 
-The actual "learning" interaction loop, per the original design's assistance ladder (See Everything → See Most
-Words → See Some Words → See Word Shapes/Lengths → See First Letters → See Minimal Hints → See Reference Only →
-Recall Independently):
+The original design's 8-step assistance ladder (See Everything → ... → Recall Independently) was a narrative
+describing *why* the ladder gets harder, not 8 literal implementation levels — it collapses onto the four concrete
+modes actually named in the feature list:
 
-- Full-text reading (already in Phase 1) as the starting point.
-- Progressive word hiding.
-- Word-length blanks (show blank shapes matching word length, not the letters).
-- First-letter mode.
-- Recite from reference (given only the reference, recall the full text).
-- `text_percent` / `reference_percent`: **last-attempt recall accuracy** — recalculated each time a practice
-  attempt is scored, not a measure of how far up the hint ladder the user has climbed. (Confirmed 2026-08-22 —
-  this was ambiguous in the original notes.)
-- `require_exact_wording`: per-scripture flag controlling how strictly a practice attempt is graded (word-for-word
-  vs. paraphrase-acceptable). Assumed meaning for the "Exact Wording" field in the original notes — flag if wrong.
+- **Level 1 — Progressive word hiding**: ~35% of words randomly hidden per attempt (re-randomized every practice),
+  shown as a plain hidden marker with no shape hint.
+- **Level 2 — Word-length blanks**: every word hidden, shown as underscores matching its letter/digit count;
+  punctuation stays visible so sentence structure is still readable.
+- **Level 3 — First-letter mode**: every word hidden except its first letter/digit.
+- **Level 4 — Recite from reference**: every word hidden with no shape hint at all — only the reference itself is
+  given as the prompt.
+- **Interaction model (confirmed 2026-08-22)**: tap-to-reveal, not typing. Hidden words are tappable; tapping
+  reveals just that word. `text_percent` = (words never tapped) / (total words) × 100 — falls directly out of the
+  interaction, satisfying the "minimal typing" mobile-first requirement.
+- **Auto-advance (confirmed 2026-08-22)**: `learning_level` moves up one (max 4) after an attempt scoring ≥85%,
+  down one (min 1) after an attempt scoring <50%, otherwise stays put. Reaching level 4 at ≥85% auto-sets
+  `is_memorized = 1` — that's what "independent recall" in the original design principle actually means. Manually
+  un-marking Memorized is still possible on the scripture detail page; the milestone just doesn't require the user
+  to notice and flip it themselves.
+- **`reference_percent` (confirmed 2026-08-22)**: a genuinely separate skill from `text_percent`, not another rung
+  on the same ladder — a single-difficulty reverse quiz (full scripture text shown, the reference itself hidden as
+  word-length blanks, same tap-to-reveal scoring). Doesn't affect `learning_level`.
+- **Dropped from the original notes**: the "Exact Wording" field. That only makes sense if practice involves
+  comparing typed text against a canonical wording, and tap-to-reveal has no typed text to compare at all — so
+  there was nothing left for it to control once the interaction model was settled.
 
 ## Phase 3 — Retention Engine (not started)
 
@@ -57,3 +68,7 @@ Recall Independently):
 | User identification | Reuse My Apps Hub's shared `users.id` directly as the numeric per-scripture user key — no separate app-specific user table | 2026-08-22 |
 | Phase split | Foundation → Practice Modes → Retention Engine | 2026-08-22 |
 | Text %/Reference % | Last-attempt recall accuracy, not hint-ladder progress | 2026-08-22 |
+| Practice interaction model | Tap-to-reveal hidden words, not typed/checked text | 2026-08-22 |
+| Reference % meaning | Reverse quiz (text shown, reference hidden) — a separate skill from Text % | 2026-08-22 |
+| Level progression | Auto-advance based on attempt score (≥85% up, <50% down) | 2026-08-22 |
+| "Exact Wording" field | Dropped — no typed text exists to grade against it under tap-to-reveal | 2026-08-22 |

@@ -28,13 +28,40 @@ CREATE TABLE IF NOT EXISTS scripture_items (
 -- SELECT u.id, a.id FROM users u, apps a
 -- WHERE u.username = 'you@example.com' AND a.app_key = 'scripture-learning';
 
--- ---------- PHASE 2 (not yet needed) ----------
--- Practice-attempt tracking will add: date_reviewed DATE NULL,
--- text_percent TINYINT NULL, reference_percent TINYINT NULL,
--- require_exact_wording TINYINT(1) NOT NULL DEFAULT 0.
--- Deliberately not added yet -- no code reads them until Phase 2 exists,
--- and an unused column is exactly the kind of drift worth avoiding.
+-- ---------- SCHEMA CHANGE: Phase 2 practice tracking ----------
+-- Run once.
+--
+-- learning_level: 1-4, position on the practice difficulty ladder --
+--   1 = progressive word hiding (~35% of words hidden)
+--   2 = word-length blanks (all words hidden, shown as blanks matching length)
+--   3 = first-letter mode (all words hidden except each word's first letter)
+--   4 = recite from reference (no text shown at all, just the reference)
+-- Advances/regresses automatically based on each attempt's text_percent --
+-- see recordPracticeAttempt in api.php. Starts at 1, not 0: level 0 would
+-- just be full-text reading, which isn't really "practice."
+--
+-- text_percent / reference_percent: last-attempt recall accuracy (0-100),
+-- NULL until a first practice attempt exists. Computed client-side as
+-- (words/tokens never tapped-to-reveal) / (total) x 100, since the
+-- tap-to-reveal interaction (confirmed 2026-08-22) makes this fall out of
+-- the interaction itself rather than needing typed-text comparison.
+--
+-- reference_percent specifically comes from a separate, single-difficulty
+-- reverse-quiz mode (full text shown, reference hidden as word-length
+-- blanks) -- a genuinely different skill from text_percent, not another
+-- rung on the same ladder.
+--
+-- date_reviewed: date of the most recent practice attempt, either mode.
+--
+-- No "exact wording" column: that only makes sense if practice involves
+-- comparing typed text against a canonical wording, and tap-to-reveal has
+-- no typed text to compare at all.
+
+ALTER TABLE scripture_items ADD COLUMN learning_level    TINYINT     NOT NULL DEFAULT 1 AFTER is_active;
+ALTER TABLE scripture_items ADD COLUMN text_percent      TINYINT     NULL     AFTER learning_level;
+ALTER TABLE scripture_items ADD COLUMN reference_percent TINYINT     NULL     AFTER text_percent;
+ALTER TABLE scripture_items ADD COLUMN date_reviewed     DATE        NULL     AFTER date_memorized;
 
 -- ---------- PHASE 3 (not yet needed) ----------
--- Spaced repetition will add: next_review_date DATE NULL,
--- learning_level TINYINT NOT NULL DEFAULT 0. Same reasoning as above.
+-- Spaced repetition will add: next_review_date DATE NULL. Deliberately not
+-- added yet -- no code reads it until Phase 3 exists.
