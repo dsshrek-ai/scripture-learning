@@ -62,6 +62,27 @@ ALTER TABLE scripture_items ADD COLUMN text_percent      TINYINT     NULL     AF
 ALTER TABLE scripture_items ADD COLUMN reference_percent TINYINT     NULL     AFTER text_percent;
 ALTER TABLE scripture_items ADD COLUMN date_reviewed     DATE        NULL     AFTER date_memorized;
 
--- ---------- PHASE 3 (not yet needed) ----------
--- Spaced repetition will add: next_review_date DATE NULL. Deliberately not
--- added yet -- no code reads it until Phase 3 exists.
+-- ---------- SCHEMA CHANGE: Phase 3 spaced repetition ----------
+-- Run once.
+--
+-- Spaced repetition applies to MEMORIZED scriptures specifically -- it's
+-- about retention after mastery, not the Phase 2 practice ladder that gets
+-- you to mastery in the first place. next_review_date IS NULL means "not in
+-- the retention system" (never memorized, or memorized status was later
+-- manually turned back off); it gets seeded the moment is_memorized becomes
+-- true (whether via Phase 2's auto-memorize or a manual toggle) and cleared
+-- if is_memorized is turned back off. See updateScripture and
+-- recordPracticeAttempt in api.php.
+--
+-- review_step: 0-7 walks the fixed interval ladder [0, 1, 3, 7, 14, 30, 60,
+-- 90] days (see intervalForStep() in api.php); beyond step 7 it's
+-- "maintenance mode" -- slow growth capped at 180 days, per the original
+-- notes' "longer-term maintenance reviews". The four-button rating on the
+-- Daily Review screen (Forgot It / Difficult / Got It / Easy) moves this
+-- step down/down-a-little/up/up-more respectively. Deliberately does NOT
+-- also move learning_level -- that stays governed exclusively by Text %
+-- from Phase 2, so a single review attempt can't have two different rules
+-- fighting over the same field. (Confirmed 2026-08-22.)
+
+ALTER TABLE scripture_items ADD COLUMN review_step      TINYINT NOT NULL DEFAULT 0 AFTER date_reviewed;
+ALTER TABLE scripture_items ADD COLUMN next_review_date DATE    NULL     AFTER review_step;

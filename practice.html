@@ -46,6 +46,7 @@
   <h1>Scripture Learning</h1>
   <nav class="site-nav">
     <a href="index.html">Home</a>
+    <a href="daily-review.html">Daily Review</a>
     <a href="my-scriptures.html">My Scriptures</a>
     <a href="add.html">Add Scripture</a>
   </nav>
@@ -57,9 +58,17 @@
 <script src="js/api.js"></script>
 <script>
   const scriptureId = Number(new URLSearchParams(window.location.search).get('id'));
+  const isDaily = new URLSearchParams(window.location.search).get('daily') === '1';
   let scripture = null;
   let mode = 'text'; // 'text' | 'reference'
   let tiles = [];
+
+  const RATINGS = [
+    { key: 'forgot', label: 'Forgot It' },
+    { key: 'difficult', label: 'Difficult' },
+    { key: 'got_it', label: 'Got It' },
+    { key: 'easy', label: 'Easy' },
+  ];
 
   const LEVEL_NAMES = {
     1: 'Progressive Word Hiding',
@@ -169,6 +178,24 @@
           message += ` Next attempt will be at level ${res.learningLevel} (${escapeHtml(LEVEL_NAMES[res.learningLevel])}).`;
         }
       }
+
+      // Daily Review attempts get a follow-up rating step that drives the
+      // spaced-repetition schedule, instead of the plain Practice Again /
+      // Back to Scripture choice a regular practice attempt gets.
+      if (isDaily && mode === 'text') {
+        resultEl.innerHTML = `
+          <div class="card">
+            <p>${message}</p>
+            <p>How did that feel?</p>
+            <p>${RATINGS.map(r => `<button class="btn btn-secondary" data-rating="${r.key}">${r.label}</button>`).join(' ')}</p>
+          </div>
+        `;
+        resultEl.querySelectorAll('[data-rating]').forEach(btn => {
+          btn.addEventListener('click', () => submitRating(btn.dataset.rating));
+        });
+        return;
+      }
+
       resultEl.innerHTML = `
         <div class="card">
           <p>${message}</p>
@@ -187,6 +214,26 @@
     }
   }
 
+  async function submitRating(rating) {
+    const resultEl = document.getElementById('result');
+    resultEl.innerHTML = `<p class="placeholder-note">Saving…</p>`;
+    try {
+      const res = await callApi('recordReviewRating', { id: scriptureId, rating });
+      if (!res.ok) {
+        resultEl.innerHTML = `<p class="placeholder-note">Couldn't save that rating. Please try again.</p>`;
+        return;
+      }
+      resultEl.innerHTML = `
+        <div class="card">
+          <p>Next review: <strong>${escapeHtml(res.nextReviewDate)}</strong> (in ${res.intervalDays} day${res.intervalDays === 1 ? '' : 's'}).</p>
+          <p><a class="btn" href="daily-review.html">Next in Review Queue</a></p>
+        </div>
+      `;
+    } catch (e) {
+      resultEl.innerHTML = `<p class="placeholder-note">Something went wrong saving that rating.</p>`;
+    }
+  }
+
   function renderLevelIndicator() {
     const el = document.getElementById('level-indicator');
     if (mode === 'reference') {
@@ -198,20 +245,29 @@
 
   function switchMode(newMode) {
     mode = newMode;
-    document.getElementById('tab-text').classList.toggle('active', mode === 'text');
-    document.getElementById('tab-reference').classList.toggle('active', mode === 'reference');
+    // Tab buttons don't exist in Daily Review mode (see renderPage) — guard
+    // rather than assume they're always in the DOM.
+    const tabText = document.getElementById('tab-text');
+    const tabReference = document.getElementById('tab-reference');
+    if (tabText) tabText.classList.toggle('active', mode === 'text');
+    if (tabReference) tabReference.classList.toggle('active', mode === 'reference');
     renderLevelIndicator();
     startAttempt();
   }
 
   function renderPage() {
     const el = document.getElementById('content');
-    el.innerHTML = `
-      <h2>${escapeHtml(scripture.reference)}</h2>
+    // Daily Review is specifically about text retention -- no mode tabs,
+    // no switching to the reference quiz, just today's due passage.
+    const tabsHtml = isDaily ? '' : `
       <div class="mode-tabs">
         <button class="btn" id="tab-text">Practice Text</button>
         <button class="btn" id="tab-reference">Practice Reference</button>
       </div>
+    `;
+    el.innerHTML = `
+      <h2>${escapeHtml(scripture.reference)}${isDaily ? ' <span class="badge">Daily Review</span>' : ''}</h2>
+      ${tabsHtml}
       <div class="level-indicator" id="level-indicator"></div>
       <div class="card">
         <p class="tile-passage" id="passage"></p>
@@ -219,8 +275,10 @@
         <div id="result" style="display:none;"></div>
       </div>
     `;
-    document.getElementById('tab-text').addEventListener('click', () => switchMode('text'));
-    document.getElementById('tab-reference').addEventListener('click', () => switchMode('reference'));
+    if (!isDaily) {
+      document.getElementById('tab-text').addEventListener('click', () => switchMode('text'));
+      document.getElementById('tab-reference').addEventListener('click', () => switchMode('reference'));
+    }
     document.getElementById('finish-btn').addEventListener('click', finishAttempt);
     switchMode('text');
   }

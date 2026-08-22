@@ -48,16 +48,34 @@ modes actually named in the feature list:
   comparing typed text against a canonical wording, and tap-to-reveal has no typed text to compare at all — so
   there was nothing left for it to control once the interaction model was settled.
 
-## Phase 3 — Retention Engine (not started)
+## Phase 3 — Retention Engine (done)
 
-- Spaced-repetition scheduling. The four-button rating (Forgot It / Difficult / Got It / Easy) in the original
-  notes maps closely to Anki's SM-2-derived algorithm — worth building on that rather than inventing new interval
-  math from scratch.
-- Suggested intervals from the original notes: same day, 1d, 3d, 7d, 14d, 30d, 60d, 90d, then longer-term
-  maintenance reviews.
-- Daily Review screen: scriptures whose review date is due, with reference / mastery level / days since last
-  review / a review button, and the four-button rating after each attempt.
-- Home screen gets its "N Reviews Due" / "Start Daily Review" primary call-to-action once this exists.
+Spaced repetition applies to **memorized** scriptures specifically — it's about retention after mastery, a
+separate concern from the Phase 2 ladder that gets you to mastery in the first place.
+
+- **Entering the system**: `next_review_date` is `NULL` (not in the retention system) until `is_memorized` becomes
+  true — whether via Phase 2's auto-memorize (reaching level 4 at ≥85%) or the manual toggle on the scripture
+  detail page. Turning Memorized back off clears `next_review_date` and resets `review_step` to 0. Re-memorizing
+  later re-seeds it fresh (only if not already scheduled, so toggling on/off/on doesn't clobber an in-progress
+  schedule that was somehow still intact).
+- **Interval ladder**: fixed sequence `[0, 1, 3, 7, 14, 30, 60, 90]` days (`review_step` 0–7), matching the original
+  notes exactly. Beyond step 7, "maintenance mode" grows slowly (+30 days per step) capped at 180 days, rather than
+  reviews either stopping or escalating forever.
+- **The four-button rating** (Forgot It / Difficult / Got It / Easy) is a genuine manual choice after a Daily
+  Review attempt — not derived from Text %, since it's meant to capture something the tap count alone can't (an
+  attempt can score fine on taps but still *feel* hard). Forgot It resets to step 0; Difficult drops 2 steps
+  (floor 0); Got It advances 1 step; Easy advances 2 steps.
+- **Confirmed 2026-08-22 — does NOT touch `learning_level`**: the original notes suggested "Forgot It" should also
+  "potentially reduce learning level," but that would mean two independent rules (Text %'s auto-advance from Phase
+  2, and this rating) both able to move the same field from a single attempt. Kept them fully separate instead —
+  `learning_level` is Text %'s alone, the rating only ever moves the review schedule.
+- **Daily Review screen** (`daily-review.html`) reuses the Phase 2 tap-to-reveal practice screen rather than a
+  separate interaction — `practice.html?id=X&daily=1` hides the Practice Reference tab (retention is specifically
+  about text recall) and, after the attempt is scored, shows the four-button rating instead of the normal Practice
+  Again / Back to Scripture choice.
+- **Home screen** now leads with "N Reviews Due" / "Start Daily Review" as the primary call-to-action, per the
+  original mockup, computed client-side from `nextReviewDate` on the existing `listScriptures` response rather
+  than a separate endpoint.
 
 ## Design Decisions Log
 
@@ -72,3 +90,4 @@ modes actually named in the feature list:
 | Reference % meaning | Reverse quiz (text shown, reference hidden) — a separate skill from Text % | 2026-08-22 |
 | Level progression | Auto-advance based on attempt score (≥85% up, <50% down) | 2026-08-22 |
 | "Exact Wording" field | Dropped — no typed text exists to grade against it under tap-to-reveal | 2026-08-22 |
+| Daily Review rating scope | Schedule only — `learning_level` stays governed exclusively by Text % | 2026-08-22 |

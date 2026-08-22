@@ -118,12 +118,25 @@ function shapeScripture(array $row): array {
     'textPercent' => $row['text_percent'] === null ? null : (int)$row['text_percent'],
     'referencePercent' => $row['reference_percent'] === null ? null : (int)$row['reference_percent'],
     'dateReviewed' => $row['date_reviewed'],
+    'reviewStep' => (int)$row['review_step'],
+    'nextReviewDate' => $row['next_review_date'],
   ];
 }
 
 const MAX_LEARNING_LEVEL = 4;
 const LEVEL_UP_THRESHOLD = 85;
 const LEVEL_DOWN_THRESHOLD = 50;
+
+// Fixed interval ladder in days; beyond it, slow capped growth for
+// long-term maintenance reviews rather than an ever-shrinking review load.
+function intervalForStep(int $step): int {
+  $ladder = [0, 1, 3, 7, 14, 30, 60, 90];
+  if ($step < count($ladder)) {
+    return $ladder[$step];
+  }
+  $stepsPastLadder = $step - (count($ladder) - 1);
+  return min(90 + $stepsPastLadder * 30, 180);
+}
 
 // ---- Router ----
 
@@ -184,6 +197,8 @@ switch ($action) {
       $where .= ' AND is_memorized = 1';
     } elseif ($filter === 'available') {
       $where .= ' AND is_active = 0 AND is_memorized = 0';
+    } elseif ($filter === 'due') {
+      $where .= ' AND next_review_date IS NOT NULL AND next_review_date <= CURDATE()';
     }
     $stmt = db()->prepare("SELECT * FROM scripture_items WHERE $where ORDER BY created_at DESC");
     $stmt->bind_param('i', $user['id']);
@@ -242,6 +257,18 @@ switch ($action) {
       $sets[] = 'date_memorized = ?';
       $types .= 's';
       $values[] = $isMemorized ? date('Y-m-d') : null;
+      // Seed into the Phase 3 retention system the moment something becomes
+      // memorized (only if it isn't already scheduled — re-toggling
+      // memorized on/off/on shouldn't reset an in-progress review
+      // schedule), or drop out of it entirely when un-memorized. No bind
+      // values needed for these two — CURDATE()/NULL/column refs only.
+      if ($isMemorized) {
+        $sets[] = 'review_step = IF(next_review_date IS NULL, 0, review_step)';
+        $sets[] = 'next_review_date = IF(next_review_date IS NULL, CURDATE(), next_review_date)';
+      } else {
+        $sets[] = 'review_step = 0';
+        $sets[] = 'next_review_date = NULL';
+      }
     }
 
     if (!$sets) {
@@ -313,9 +340,14 @@ switch ($action) {
     $justMemorized = $level === MAX_LEARNING_LEVEL && $percent >= LEVEL_UP_THRESHOLD && !$row['is_memorized'];
 
     if ($justMemorized) {
+      // Same "seed only if not already scheduled" guard as updateScripture's
+      // isMemorized handling — matters if this scripture was memorized and
+      // manually un-memorized before, then re-earned independent recall here.
       $stmt = db()->prepare(
         'UPDATE scripture_items
-         SET learning_level = ?, text_percent = ?, date_reviewed = ?, is_memorized = 1, date_memorized = ?
+         SET learning_level = ?, text_percent = ?, date_reviewed = ?, is_memorized = 1, date_memorized = ?,
+             review_step = IF(next_review_date IS NULL, 0, review_step),
+             next_review_date = IF(next_review_date IS NULL, CURDATE(), next_review_date)
          WHERE id = ? AND user_id = ?'
       );
       $stmt->bind_param('iissii', $level, $percent, $today, $today, $id, $user['id']);
@@ -329,6 +361,47 @@ switch ($action) {
     $stmt->close();
 
     respond(['ok' => true, 'learningLevel' => $level, 'justMemorized' => $justMemorized]);
+  }
+
+  // Applies a Daily Review rating to the spaced-repetition schedule only —
+  // deliberately does not touch learning_level (see schema.sql). Called
+  // after recordPracticeAttempt for the same attempt, not instead of it.
+  case 'recordReviewRating': {
+    $user = currentUser();
+    $id = (int)($body['id'] ?? 0);
+    $rating = (string)($body['rating'] ?? '');
+    $validRatings = ['forgot', 'difficult', 'got_it', 'easy'];
+    if ($id <= 0 || !in_array($rating, $validRatings, true)) {
+      fail('id and a valid rating are required');
+    }
+
+    $stmt = db()->prepare('SELECT review_step FROM scripture_items WHERE id = ? AND user_id = ?');
+    $stmt->bind_param('ii', $id, $user['id']);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$row) {
+      fail('Scripture not found', 404);
+    }
+
+    $step = (int)$row['review_step'];
+    switch ($rating) {
+      case 'forgot':    $step = 0; break;
+      case 'difficult': $step = max($step - 2, 0); break;
+      case 'got_it':    $step = $step + 1; break;
+      case 'easy':      $step = $step + 2; break;
+    }
+    $intervalDays = intervalForStep($step);
+    $nextReviewDate = date('Y-m-d', strtotime("+$intervalDays days"));
+
+    $stmt = db()->prepare(
+      'UPDATE scripture_items SET review_step = ?, next_review_date = ? WHERE id = ? AND user_id = ?'
+    );
+    $stmt->bind_param('isii', $step, $nextReviewDate, $id, $user['id']);
+    $stmt->execute();
+    $stmt->close();
+
+    respond(['ok' => true, 'nextReviewDate' => $nextReviewDate, 'intervalDays' => $intervalDays]);
   }
 
   case 'deleteScripture': {

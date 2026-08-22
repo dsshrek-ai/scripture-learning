@@ -12,6 +12,7 @@
   <h1>Scripture Learning</h1>
   <nav class="site-nav">
     <a href="index.html" aria-current="page">Home</a>
+    <a href="daily-review.html">Daily Review</a>
     <a href="my-scriptures.html">My Scriptures</a>
     <a href="add.html">Add Scripture</a>
   </nav>
@@ -34,12 +35,19 @@
       const scriptures = result.scriptures;
       const learning = scriptures.filter(s => s.isActive && !s.isMemorized).length;
       const memorized = scriptures.filter(s => s.isMemorized).length;
+      const today = new Date().toISOString().slice(0, 10);
+      const due = scriptures.filter(s => s.nextReviewDate && s.nextReviewDate <= today).length;
 
       el.innerHTML = `
         <div class="card home-tile">
+          <div class="big-number">${due}</div>
+          <div>${due === 1 ? 'Review Due' : 'Reviews Due'}</div>
+          ${due ? `<p><a class="btn" href="daily-review.html">Start Daily Review</a></p>` : '<p class="placeholder-note">All caught up.</p>'}
+        </div>
+        <div class="card home-tile">
           <div class="big-number">${learning}</div>
           <div>Currently Learning</div>
-          ${learning ? `<p><a class="btn" href="my-scriptures.html?filter=learning">Continue Learning</a></p>` : ''}
+          ${learning ? `<p><a class="btn btn-secondary" href="my-scriptures.html?filter=learning">Continue Learning</a></p>` : ''}
         </div>
         <div class="card home-tile">
           <div class="big-number">${memorized}</div>
@@ -50,7 +58,7 @@
           <div>Total Scriptures</div>
         </div>
         <div class="home-actions">
-          <a class="btn" href="my-scriptures.html">My Scriptures</a>
+          <a class="btn btn-secondary" href="my-scriptures.html">My Scriptures</a>
           <a class="btn btn-secondary" href="add.html">Add Scripture</a>
         </div>
       `;

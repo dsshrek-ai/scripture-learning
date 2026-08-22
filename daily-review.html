@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Review | Scripture Learning</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<header class="site-header">
+  <h1>Scripture Learning</h1>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="daily-review.html">Daily Review</a>
+    <a href="my-scriptures.html">My Scriptures</a>
+    <a href="add.html">Add Scripture</a>
+  </nav>
+</header>
+<main id="main-content">
+  <h2>Today's Review</h2>
+  <div id="content">Loading&hellip;</div>
+</main>
+<footer class="site-footer">Scripture Learning</footer>
+<script src="js/api.js"></script>
+<script>
+  function daysSince(dateStr) {
+    if (!dateStr) return null;
+    const then = new Date(dateStr + 'T00:00:00');
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return Math.round((now - then) / 86400000);
+  }
+
+  (async () => {
+    await AUTH_READY;
+    const el = document.getElementById('content');
+    try {
+      const result = await callApiGet('listScriptures', { filter: 'due' });
+      if (!result.ok) {
+        showPlaceholder(el, "Couldn't load your review queue right now.");
+        return;
+      }
+      const due = result.scriptures;
+      if (!due.length) {
+        el.innerHTML = `<p class="placeholder-note">Nothing due for review right now — nice work staying caught up. Memorized scriptures land here automatically once they're due.</p>`;
+        return;
+      }
+      el.innerHTML = `<p class="badge">${due.length} Scripture${due.length === 1 ? '' : 's'} Due</p>` + due.map(s => {
+        const days = daysSince(s.dateReviewed);
+        return `
+          <div class="card scripture-card">
+            <h3>${escapeHtml(s.reference)}</h3>
+            <div class="meta">
+              Learning Level: ${s.learningLevel} of 4
+              ${s.textPercent !== null ? ` &middot; Text: ${s.textPercent}%` : ''}
+              ${days !== null ? ` &middot; ${days === 0 ? 'Reviewed today' : days + ' day' + (days === 1 ? '' : 's') + ' since last review'}` : ''}
+            </div>
+            <a class="btn" href="practice.html?id=${s.id}&daily=1">Review</a>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      showPlaceholder(el, "Couldn't load right now — check your connection and try refreshing.");
+    }
+  })();
+</script>
+</body>
+</html>
