@@ -68,7 +68,8 @@
             ${s.referencePercent !== null ? ` &middot; Reference: ${s.referencePercent}%` : ''}
           </div>
           <p>${escapeHtml(s.scriptureText.length > 120 ? s.scriptureText.slice(0, 120) + '…' : s.scriptureText)}</p>
-          <a class="btn" href="scripture.html?id=${s.id}">Open</a>
+          <a class="btn" href="practice.html?id=${s.id}">Practice</a>
+          <a class="btn btn-secondary" href="scripture.html?id=${s.id}">Open</a>
         </div>
       `).join('');
     } catch (e) {

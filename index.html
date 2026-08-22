@@ -39,6 +39,7 @@
         <div class="card home-tile">
           <div class="big-number">${learning}</div>
           <div>Currently Learning</div>
+          ${learning ? `<p><a class="btn" href="my-scriptures.html?filter=learning">Continue Learning</a></p>` : ''}
         </div>
         <div class="card home-tile">
           <div class="big-number">${memorized}</div>
