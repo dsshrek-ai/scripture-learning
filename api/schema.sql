@@ -86,3 +86,29 @@ ALTER TABLE scripture_items ADD COLUMN date_reviewed     DATE        NULL     AF
 
 ALTER TABLE scripture_items ADD COLUMN review_step      TINYINT NOT NULL DEFAULT 0 AFTER date_reviewed;
 ALTER TABLE scripture_items ADD COLUMN next_review_date DATE    NULL     AFTER review_step;
+
+-- ---------- SCHEMA CHANGE: chaining level inserted as new Level 1 ----------
+-- Run once.
+--
+-- Adds a 5th rung to the practice ladder, ahead of everything built so far:
+--   1 = phrase-by-phrase chaining (NEW -- see practice.html buildChainSteps)
+--   2 = progressive word hiding      (was 1)
+--   3 = word-length blanks           (was 2)
+--   4 = first-letter mode            (was 3)
+--   5 = recite from reference        (was 4)
+-- MAX_LEARNING_LEVEL in api.php is now 5. New scriptures still default to
+-- learning_level = 1 (the column default is unchanged) -- they're meant to
+-- start with chaining, same as everything else. This UPDATE only shifts
+-- EXISTING rows, so already-in-progress scriptures keep doing the same
+-- technique they were already doing, just under its new number, rather than
+-- being dropped back into chaining they may have already outgrown.
+--
+-- Chaining produces no text_percent (there's nothing hidden to measure --
+-- it's rehearsal, not a recall test) -- finishing it just advances straight
+-- to level 2 via a new advanceFromChaining action. Because of that,
+-- recordPracticeAttempt's percent-based down-regression now floors at
+-- level 2, not 1 -- a bad tap-to-reveal attempt shouldn't auto-drop someone
+-- back into a fundamentally different, non-scored activity. (Both decisions
+-- 2026-08-23.)
+
+UPDATE scripture_items SET learning_level = learning_level + 1;

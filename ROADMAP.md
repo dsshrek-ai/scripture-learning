@@ -22,6 +22,11 @@ before.
 
 ## Phase 2 — Practice Modes (done)
 
+> **Note**: the level numbers below (1–4) are what this phase originally shipped with. A 5th rung was inserted
+> *ahead* of all of them on 2026-08-23 — see "Chaining level inserted as new Level 1" below — so what's described
+> here as Level 1 is Level 2 today, Level 2 is Level 3, and so on. Left as originally written rather than
+> renumbered in place, so this stays an accurate record of what Phase 2 actually shipped.
+
 The original design's 8-step assistance ladder (See Everything → ... → Recall Independently) was a narrative
 describing *why* the ladder gets harder, not 8 literal implementation levels — it collapses onto the four concrete
 modes actually named in the feature list:
@@ -77,6 +82,32 @@ separate concern from the Phase 2 ladder that gets you to mastery in the first p
   original mockup, computed client-side from `nextReviewDate` on the existing `listScriptures` response rather
   than a separate endpoint.
 
+## Post-Phase-3 addition — chaining level inserted as new Level 1 (2026-08-23)
+
+A technique the user already uses successfully offline, added as a genuine new first rung ahead of everything
+built in Phase 2 — not a replacement for any of it. The ladder is now 5 levels: **1 = phrase-by-phrase chaining
+(new)**, 2 = progressive word hiding, 3 = word-length blanks, 4 = first-letter mode, 5 = recite from reference.
+
+- **The technique**: split the passage into paragraphs (blank-line-separated) and each paragraph into ~80-character
+  phrases (breaking on nearby punctuation when possible, else the nearest word boundary). Recite phrase 1 three
+  times, then phrase 1+2 three times, then 1+2+3, and so on until the paragraph is complete. Move to the next
+  paragraph and build it up the same way on its own; once *that* paragraph is complete, add one more step reciting
+  every paragraph seen so far together, three times. Repeat for each subsequent paragraph. A passage with no blank
+  lines (the common case for a single verse or two) is just one paragraph — the whole "combine paragraphs" step
+  never triggers, so short passages need no special-casing.
+- **No score**: unlike every other level, nothing is hidden here, so there's nothing to measure recall against —
+  it's rehearsal, not a recall test. Finishing it advances straight to Level 2 via a dedicated
+  `advanceFromChaining` action, not `recordPracticeAttempt`.
+- **Rep tracking (confirmed 2026-08-23)**: tap-counted, not trust-based — a counter shows "Repetition X of 3" and a
+  button you tap after each recitation, auto-advancing to the next phrase after the 3rd tap.
+- **Existing progress (confirmed 2026-08-23)**: every scripture's `learning_level` was shifted up by 1 in a one-time
+  migration, so something already doing progressive word hiding (old Level 1) keeps doing exactly that under its
+  new number (Level 2), rather than being dropped back into chaining it may have already outgrown. New scriptures
+  still default to Level 1, since chaining is meant to be everyone's starting point going forward.
+- **`recordPracticeAttempt`'s down-regression floor moved from 1 to 2**: since level 1 has no percent-scoring path
+  at all, a bad tap-to-reveal attempt at level 2 can't auto-drop a scripture back into chaining — that's a
+  fundamentally different, non-scored activity, not "try again but easier."
+
 ## Design Decisions Log
 
 | Decision | Answer | Date |
@@ -91,3 +122,5 @@ separate concern from the Phase 2 ladder that gets you to mastery in the first p
 | Level progression | Auto-advance based on attempt score (≥85% up, <50% down) | 2026-08-22 |
 | "Exact Wording" field | Dropped — no typed text exists to grade against it under tap-to-reveal | 2026-08-22 |
 | Daily Review rating scope | Schedule only — `learning_level` stays governed exclusively by Text % | 2026-08-22 |
+| Chaining rep tracking | Tap-counted ("Repetition X of 3"), not trust-based | 2026-08-23 |
+| Chaining + existing progress | Shift existing `learning_level` values up by 1, don't reset everyone | 2026-08-23 |

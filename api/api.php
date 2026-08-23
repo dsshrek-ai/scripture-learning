@@ -123,7 +123,8 @@ function shapeScripture(array $row): array {
   ];
 }
 
-const MAX_LEARNING_LEVEL = 4;
+const MAX_LEARNING_LEVEL = 5;
+const MIN_SCORED_LEVEL = 2; // level 1 (chaining) has no percent-based path in or out
 const LEVEL_UP_THRESHOLD = 85;
 const LEVEL_DOWN_THRESHOLD = 50;
 
@@ -288,6 +289,28 @@ switch ($action) {
     respond(['ok' => true]);
   }
 
+  // Finishes the Level 1 chaining rehearsal — no percent to record (nothing
+  // was hidden to measure recall against), so this just advances straight
+  // to level 2 and stamps date_reviewed, rather than going through
+  // recordPracticeAttempt's percent-based logic at all. The `AND
+  // learning_level = 1` guard makes a duplicate/stale call harmless.
+  case 'advanceFromChaining': {
+    $user = currentUser();
+    $id = (int)($body['id'] ?? 0);
+    if ($id <= 0) {
+      fail('A valid id is required');
+    }
+    $today = date('Y-m-d');
+    $stmt = db()->prepare(
+      'UPDATE scripture_items SET learning_level = 2, date_reviewed = ?
+       WHERE id = ? AND user_id = ? AND learning_level = 1'
+    );
+    $stmt->bind_param('sii', $today, $id, $user['id']);
+    $stmt->execute();
+    $stmt->close();
+    respond(['ok' => true, 'learningLevel' => 2]);
+  }
+
   // Records the result of one practice attempt. `mode` is 'text' (the
   // difficulty-ladder practice, drives learning_level) or 'reference' (the
   // fixed-difficulty reverse quiz, never changes learning_level). `percent`
@@ -329,14 +352,15 @@ switch ($action) {
     if ($percent >= LEVEL_UP_THRESHOLD) {
       $level = min($level + 1, MAX_LEARNING_LEVEL);
     } elseif ($percent < LEVEL_DOWN_THRESHOLD) {
-      $level = max($level - 1, 1);
+      $level = max($level - 1, MIN_SCORED_LEVEL);
     }
 
     // Reaching (or already sitting at) the top level with a strong attempt
     // is independent recall -- the milestone the whole ladder is aimed at.
     // Doesn't require this to be a *fresh* level-up; scoring well again at
-    // level 4 counts too. Never un-sets an existing memorized flag here —
-    // that's still a manual, deliberate action on the scripture detail page.
+    // the top level counts too. Never un-sets an existing memorized flag
+    // here — that's still a manual, deliberate action on the scripture
+    // detail page.
     $justMemorized = $level === MAX_LEARNING_LEVEL && $percent >= LEVEL_UP_THRESHOLD && !$row['is_memorized'];
 
     if ($justMemorized) {

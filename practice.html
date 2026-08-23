@@ -71,11 +71,128 @@
   ];
 
   const LEVEL_NAMES = {
-    1: 'Progressive Word Hiding',
-    2: 'Word-Length Blanks',
-    3: 'First-Letter Mode',
-    4: 'Recite from Reference',
+    1: 'Phrase-by-Phrase Chaining',
+    2: 'Progressive Word Hiding',
+    3: 'Word-Length Blanks',
+    4: 'First-Letter Mode',
+    5: 'Recite from Reference',
   };
+
+  // ---- Level 1: phrase-by-phrase chaining ----
+  // No hidden words here at all -- the passage grows one phrase at a time,
+  // repeated CHAIN_REPS times at each size, so there's nothing to tap-reveal
+  // and no percent to compute. See ROADMAP.md for the full technique.
+  const CHAIN_REPS = 3;
+  let chainSteps = [];
+  let chainStepIndex = 0;
+  let chainRepCount = 0;
+
+  function splitParagraphs(text) {
+    const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+    return paragraphs.length ? paragraphs : [text.trim()];
+  }
+
+  // Targets ~80 characters per phrase, preferring to break on a nearby
+  // punctuation mark over a hard 80-char cut, and never mid-word if no
+  // punctuation is nearby. Returns end-offsets into `text`, so
+  // text.slice(0, offset) always reproduces the original text exactly --
+  // no rejoining, no risk of altering spacing/punctuation.
+  function findPhraseBreakpoints(text) {
+    const TARGET = 80;
+    const WINDOW = 20;
+    const PUNCTUATION = /[.,;:!?]/;
+    const breakpoints = [];
+    let pos = 0;
+    while (pos < text.length) {
+      const remaining = text.length - pos;
+      if (remaining <= TARGET + WINDOW) {
+        breakpoints.push(text.length);
+        break;
+      }
+      const searchStart = pos + Math.max(TARGET - WINDOW, 1);
+      const searchEnd = Math.min(pos + TARGET + WINDOW, text.length);
+      let bestIndex = -1;
+      let bestDistance = Infinity;
+      for (let i = searchStart; i < searchEnd; i++) {
+        if (PUNCTUATION.test(text[i])) {
+          const distance = Math.abs((i - pos) - TARGET);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+          }
+        }
+      }
+      let breakAt;
+      if (bestIndex !== -1) {
+        breakAt = bestIndex + 1; // include the punctuation mark in this phrase
+      } else {
+        let idx = pos + TARGET;
+        while (idx < text.length && idx < pos + TARGET + WINDOW && !/\s/.test(text[idx])) idx++;
+        breakAt = Math.min(idx, pos + TARGET + WINDOW, text.length);
+      }
+      breakpoints.push(breakAt);
+      pos = breakAt;
+    }
+    return breakpoints;
+  }
+
+  // Builds the full ordered list of chaining steps: each paragraph grows
+  // phrase-by-phrase on its own, then (from the 2nd paragraph on) one extra
+  // step recites every paragraph seen so far together.
+  function buildChainSteps(fullText) {
+    const paragraphs = splitParagraphs(fullText);
+    const steps = [];
+    const completedParagraphs = [];
+    paragraphs.forEach((paragraph, pIndex) => {
+      findPhraseBreakpoints(paragraph).forEach(end => steps.push(paragraph.slice(0, end)));
+      completedParagraphs.push(paragraph);
+      if (pIndex > 0) steps.push(completedParagraphs.join('\n\n'));
+    });
+    return steps;
+  }
+
+  function startChaining() {
+    chainSteps = buildChainSteps(scripture.scriptureText);
+    chainStepIndex = 0;
+    chainRepCount = 0;
+    renderChainStep();
+  }
+
+  function renderChainStep() {
+    const area = document.getElementById('practice-area');
+    area.innerHTML = `
+      <p class="placeholder-note">Step ${chainStepIndex + 1} of ${chainSteps.length}</p>
+      <p class="scripture-text">${escapeHtml(chainSteps[chainStepIndex])}</p>
+      <p>Repetition ${chainRepCount + 1} of ${CHAIN_REPS}</p>
+      <p><button class="btn" id="chain-rep-btn">I Said It</button></p>
+    `;
+    document.getElementById('chain-rep-btn').addEventListener('click', onChainRep);
+  }
+
+  function onChainRep() {
+    chainRepCount++;
+    if (chainRepCount >= CHAIN_REPS) {
+      chainStepIndex++;
+      chainRepCount = 0;
+      if (chainStepIndex >= chainSteps.length) {
+        finishChaining();
+        return;
+      }
+    }
+    renderChainStep();
+  }
+
+  async function finishChaining() {
+    const area = document.getElementById('practice-area');
+    area.innerHTML = `<p class="placeholder-note">Saving…</p>`;
+    try {
+      const res = await callApi('advanceFromChaining', { id: scriptureId });
+      if (res.ok) scripture.learningLevel = res.learningLevel;
+      showCompletionPanel(`Nice work — the whole passage is chained together. Next up: Level ${scripture.learningLevel} (${escapeHtml(LEVEL_NAMES[scripture.learningLevel])}).`);
+    } catch (e) {
+      area.innerHTML = `<p class="placeholder-note">Something went wrong saving your progress.</p>`;
+    }
+  }
 
   // Splits into alternating word / whitespace chunks so original spacing
   // and line breaks are preserved exactly.
@@ -115,11 +232,12 @@
     }
 
     const level = scripture.learningLevel;
-    const style = level === 2 ? 'length' : level === 3 ? 'firstLetter' : 'blank';
+    const style = level === 3 ? 'length' : level === 4 ? 'firstLetter' : 'blank';
     return tokenize(scripture.scriptureText).map(t => {
       if (!t.isWord) return { ...t, initiallyHidden: false, style: null, revealed: true };
-      // Level 1 only hides a random ~35% of words; levels 2-4 hide all of them.
-      const hidden = level === 1 ? Math.random() < 0.35 : true;
+      // Level 2 only hides a random ~35% of words; levels 3-5 hide all of them.
+      // (Level 1, chaining, never reaches buildTiles() at all.)
+      const hidden = level === 2 ? Math.random() < 0.35 : true;
       return { ...t, initiallyHidden: hidden, style, revealed: !hidden };
     });
   }
@@ -148,24 +266,38 @@
     return Math.round(((wordTiles.length - tappedCount) / wordTiles.length) * 100);
   }
 
+  // Level 1 (chaining) has an entirely different UI from levels 2-5
+  // (tap-to-reveal tiles) -- both render into the same #practice-area
+  // container rather than sharing fixed DOM elements, since their markup
+  // needs are genuinely different.
   function startAttempt() {
+    if (mode === 'text' && scripture.learningLevel === 1) {
+      startChaining();
+      return;
+    }
     tiles = buildTiles();
-    document.getElementById('result').style.display = 'none';
-    document.getElementById('finish-btn').style.display = '';
+    renderTileAttempt();
+  }
+
+  function renderTileAttempt() {
+    const area = document.getElementById('practice-area');
+    area.innerHTML = `
+      <p class="tile-passage" id="passage"></p>
+      <p><button class="btn" id="finish-btn">I've Recited It — Check My Score</button></p>
+    `;
     renderTiles();
+    document.getElementById('finish-btn').addEventListener('click', finishAttempt);
   }
 
   async function finishAttempt() {
     const percent = computePercent();
-    document.getElementById('finish-btn').style.display = 'none';
-    const resultEl = document.getElementById('result');
-    resultEl.style.display = '';
-    resultEl.innerHTML = `<p class="placeholder-note">Saving…</p>`;
+    const area = document.getElementById('practice-area');
+    area.innerHTML = `<p class="placeholder-note">Saving…</p>`;
 
     try {
       const res = await callApi('recordPracticeAttempt', { id: scriptureId, mode, percent });
       if (!res.ok) {
-        resultEl.innerHTML = `<p class="placeholder-note">Couldn't save that attempt. Please try again.</p>`;
+        area.innerHTML = `<p class="placeholder-note">Couldn't save that attempt. Please try again.</p>`;
         return;
       }
       let message = `<strong>${percent}%</strong> recalled without help.`;
@@ -178,59 +310,56 @@
           message += ` Next attempt will be at level ${res.learningLevel} (${escapeHtml(LEVEL_NAMES[res.learningLevel])}).`;
         }
       }
-
-      // Daily Review attempts get a follow-up rating step that drives the
-      // spaced-repetition schedule, instead of the plain Practice Again /
-      // Back to Scripture choice a regular practice attempt gets.
-      if (isDaily && mode === 'text') {
-        resultEl.innerHTML = `
-          <div class="card">
-            <p>${message}</p>
-            <p>How did that feel?</p>
-            <p>${RATINGS.map(r => `<button class="btn btn-secondary" data-rating="${r.key}">${r.label}</button>`).join(' ')}</p>
-          </div>
-        `;
-        resultEl.querySelectorAll('[data-rating]').forEach(btn => {
-          btn.addEventListener('click', () => submitRating(btn.dataset.rating));
-        });
-        return;
-      }
-
-      resultEl.innerHTML = `
-        <div class="card">
-          <p>${message}</p>
-          <p>
-            <button class="btn" id="again-btn">Practice Again</button>
-            <a class="btn btn-secondary" href="scripture.html?id=${scriptureId}">Back to Scripture</a>
-          </p>
-        </div>
-      `;
-      document.getElementById('again-btn').addEventListener('click', () => {
-        renderLevelIndicator();
-        startAttempt();
-      });
+      showCompletionPanel(message);
     } catch (e) {
-      resultEl.innerHTML = `<p class="placeholder-note">Something went wrong saving that attempt.</p>`;
+      area.innerHTML = `<p class="placeholder-note">Something went wrong saving that attempt.</p>`;
     }
   }
 
+  // Shared by both finishAttempt (tile levels) and finishChaining (level
+  // 1) — isDaily always means mode === 'text' (Daily Review hides the mode
+  // tabs entirely), so there's no need to check mode here too.
+  function showCompletionPanel(message) {
+    const area = document.getElementById('practice-area');
+    if (isDaily) {
+      area.innerHTML = `
+        <p>${message}</p>
+        <p>How did that feel?</p>
+        <p>${RATINGS.map(r => `<button class="btn btn-secondary" data-rating="${r.key}">${r.label}</button>`).join(' ')}</p>
+      `;
+      area.querySelectorAll('[data-rating]').forEach(btn => {
+        btn.addEventListener('click', () => submitRating(btn.dataset.rating));
+      });
+      return;
+    }
+    area.innerHTML = `
+      <p>${message}</p>
+      <p>
+        <button class="btn" id="again-btn">Practice Again</button>
+        <a class="btn btn-secondary" href="scripture.html?id=${scriptureId}">Back to Scripture</a>
+      </p>
+    `;
+    document.getElementById('again-btn').addEventListener('click', () => {
+      renderLevelIndicator();
+      startAttempt();
+    });
+  }
+
   async function submitRating(rating) {
-    const resultEl = document.getElementById('result');
-    resultEl.innerHTML = `<p class="placeholder-note">Saving…</p>`;
+    const area = document.getElementById('practice-area');
+    area.innerHTML = `<p class="placeholder-note">Saving…</p>`;
     try {
       const res = await callApi('recordReviewRating', { id: scriptureId, rating });
       if (!res.ok) {
-        resultEl.innerHTML = `<p class="placeholder-note">Couldn't save that rating. Please try again.</p>`;
+        area.innerHTML = `<p class="placeholder-note">Couldn't save that rating. Please try again.</p>`;
         return;
       }
-      resultEl.innerHTML = `
-        <div class="card">
-          <p>Next review: <strong>${escapeHtml(res.nextReviewDate)}</strong> (in ${res.intervalDays} day${res.intervalDays === 1 ? '' : 's'}).</p>
-          <p><a class="btn" href="daily-review.html">Next in Review Queue</a></p>
-        </div>
+      area.innerHTML = `
+        <p>Next review: <strong>${escapeHtml(res.nextReviewDate)}</strong> (in ${res.intervalDays} day${res.intervalDays === 1 ? '' : 's'}).</p>
+        <p><a class="btn" href="daily-review.html">Next in Review Queue</a></p>
       `;
     } catch (e) {
-      resultEl.innerHTML = `<p class="placeholder-note">Something went wrong saving that rating.</p>`;
+      area.innerHTML = `<p class="placeholder-note">Something went wrong saving that rating.</p>`;
     }
   }
 
@@ -269,17 +398,12 @@
       <h2>${escapeHtml(scripture.reference)}${isDaily ? ' <span class="badge">Daily Review</span>' : ''}</h2>
       ${tabsHtml}
       <div class="level-indicator" id="level-indicator"></div>
-      <div class="card">
-        <p class="tile-passage" id="passage"></p>
-        <p><button class="btn" id="finish-btn">I've Recited It — Check My Score</button></p>
-        <div id="result" style="display:none;"></div>
-      </div>
+      <div class="card" id="practice-area"></div>
     `;
     if (!isDaily) {
       document.getElementById('tab-text').addEventListener('click', () => switchMode('text'));
       document.getElementById('tab-reference').addEventListener('click', () => switchMode('reference'));
     }
-    document.getElementById('finish-btn').addEventListener('click', finishAttempt);
     switchMode('text');
   }
 
